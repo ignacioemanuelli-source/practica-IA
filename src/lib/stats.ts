@@ -187,7 +187,7 @@ export function getGoalRecommendation(rm: number, goal: TrainingGoal): GoalRecom
         weightMax: Math.round(rm * 0.70),
         reps: '1 - 5 reps (máxima velocidad)',
         sets: '3 - 5 series',
-        rest: '2 - 3 min',
+        rest: '3 - 5 min',
       };
     case 'resistencia':
       return {
@@ -208,7 +208,7 @@ export function getGoalRecommendation(rm: number, goal: TrainingGoal): GoalRecom
         weightMax: Math.round(rm * 0.80),
         reps: '6 - 12 reps',
         sets: '3 - 4 series',
-        rest: '60 - 90 seg',
+        rest: '1 - 3 min',
       };
   }
 }
