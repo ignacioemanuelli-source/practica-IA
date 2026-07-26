@@ -1,5 +1,5 @@
 import { Dumbbell, Gauge, TrendingUp, TrendingDown, Repeat, Calendar, Minus, Target } from 'lucide-react';
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import type { WorkoutSession } from '@/lib/supabase';
 import {
   computeMonthSummary,
@@ -16,13 +16,6 @@ type Props = {
   month: MonthKey;
   onMonthChange: (month: MonthKey) => void;
 };
-
-const GOALS: { id: TrainingGoal; label: string }[] = [
-  { id: 'hipertrofia', label: 'Hipertrofia' },
-  { id: 'fuerza', label: 'Fuerza' },
-  { id: 'potencia', label: 'Potencia' },
-  { id: 'resistencia', label: 'Resistencia' },
-];
 
 const fmt = (n?: number) => {
   if (n === undefined || n === null || Number.isNaN(n)) return '0';
@@ -45,9 +38,9 @@ export default function StatsCards({ sessions = [], month, onMonthChange }: Prop
 
   const [selectedGoals, setSelectedGoals] = useState<Record<string, TrainingGoal>>({});
 
-  const handleGoalChange = useCallback((exercise: string, goal: TrainingGoal) => {
+  const handleGoalChange = (exercise: string, goal: TrainingGoal) => {
     setSelectedGoals((prev) => ({ ...prev, [exercise]: goal }));
-  }, []);
+  };
 
   const summaryCards = [
     {
@@ -125,159 +118,159 @@ export default function StatsCards({ sessions = [], month, onMonthChange }: Prop
         <h3 className="mb-3 px-1 text-sm font-medium text-zinc-300">
           Métricas por ejercicio · {formatMonth(month)}
         </h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {byExercise.map((stat) => {
+            const hasData = stat.sessionsInMonth > 0;
+            const loadDiff = stat.loadProgressPercentage ?? 0;
+            const volDiff = stat.volumeProgressPercentage ?? 0;
 
-        {byExercise.length === 0 ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center text-sm text-zinc-500">
-            No hay registros de entrenamiento para este período.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {byExercise.map((stat) => {
-              const hasData = stat.sessionsInMonth > 0;
-              const loadDiff = stat.loadProgressPercentage ?? 0;
-              const volDiff = stat.volumeProgressPercentage ?? 0;
+            const activeGoal = selectedGoals[stat.exercise] || 'hipertrofia';
+            
+            // Usamos la función importada desde lib/stats
+            const prescription = stat.best1RM > 0 ? getGoalRecommendation(stat.best1RM, activeGoal) : null;
 
-              const activeGoal = selectedGoals[stat.exercise] || 'hipertrofia';
-              const prescription =
-                stat.best1RM > 0 ? getGoalRecommendation(stat.best1RM, activeGoal) : null;
-
-              return (
-                <div
-                  key={stat.exercise}
-                  className={`rounded-2xl border bg-zinc-950/60 p-5 shadow-lg shadow-black/30 backdrop-blur transition ${
-                    hasData ? 'border-zinc-800 hover:border-zinc-700' : 'border-zinc-900 opacity-60'
-                  }`}
-                >
-                  {/* Header Ejercicio */}
-                  <div className="mb-4 flex items-center justify-between border-b border-zinc-800/60 pb-3">
-                    <h4 className="font-semibold text-zinc-100">{stat.exercise}</h4>
-                    <span className="rounded-full bg-zinc-900 px-2.5 py-0.5 text-xs text-zinc-400">
-                      {stat.sessionsInMonth} {stat.sessionsInMonth === 1 ? 'sesión' : 'sesiones'}
-                    </span>
-                  </div>
-
-                  {/* Métricas históricas y del mes */}
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                    <div>
-                      <p className="text-xs text-zinc-500">Carga media</p>
-                      <p className="font-semibold text-sky-400">
-                        {stat.avgLoadPerSet > 0 ? `${fmt(stat.avgLoadPerSet)} kg` : '—'}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-zinc-500">Mejora Carga (vs mes ant.)</p>
-                      <p
-                        className={`font-semibold flex items-center gap-1 ${
-                          loadDiff > 0
-                            ? 'text-emerald-400'
-                            : loadDiff < 0
-                            ? 'text-rose-400'
-                            : 'text-zinc-500'
-                        }`}
-                      >
-                        {loadDiff > 0 && <TrendingUp className="h-3.5 w-3.5" />}
-                        {loadDiff < 0 && <TrendingDown className="h-3.5 w-3.5" />}
-                        {loadDiff === 0 && <Minus className="h-3.5 w-3.5" />}
-                        {fmtProgress(loadDiff)}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-zinc-500">Volumen del mes</p>
-                      <p className="font-semibold text-emerald-400">
-                        {stat.totalVolumeMonth > 0 ? `${fmt(stat.totalVolumeMonth)}` : '—'}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-zinc-500">Mejora Vol. (vs mes ant.)</p>
-                      <p
-                        className={`font-semibold flex items-center gap-1 ${
-                          volDiff > 0
-                            ? 'text-emerald-400'
-                            : volDiff < 0
-                            ? 'text-rose-400'
-                            : 'text-zinc-500'
-                        }`}
-                      >
-                        {volDiff > 0 && <TrendingUp className="h-3.5 w-3.5" />}
-                        {volDiff < 0 && <TrendingDown className="h-3.5 w-3.5" />}
-                        {volDiff === 0 && <Minus className="h-3.5 w-3.5" />}
-                        {fmtProgress(volDiff)}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-zinc-500">Peso máx. histórico</p>
-                      <p className="font-semibold text-amber-400">
-                        {stat.maxWeightHistorical > 0 ? `${fmt(stat.maxWeightHistorical)} kg` : '—'}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-zinc-500">Mejor 1RM (Epley)</p>
-                      <p className="font-semibold text-rose-400">
-                        {stat.best1RM > 0 ? `${fmt(stat.best1RM)} kg` : '—'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* SECCIÓN INTERACTIVA: RECOMENDACIÓN DE CARGA / OBJETIVO */}
-                  {prescription && (
-                    <div className="mt-4 border-t border-zinc-800/80 pt-4">
-                      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <span className="flex items-center gap-1 text-[11px] font-medium text-zinc-400">
-                          <Target className="h-3 w-3 text-amber-400" /> Carga Sugerida
-                        </span>
-
-                        {/* Selector de Objetivos */}
-                        <div className="flex overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
-                          {GOALS.map((g) => (
-                            <button
-                              type="button"
-                              key={g.id}
-                              onClick={() => handleGoalChange(stat.exercise, g.id)}
-                              className={`whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-medium capitalize transition ${
-                                activeGoal === g.id
-                                  ? 'bg-amber-500 font-bold text-zinc-950'
-                                  : 'text-zinc-400 hover:text-zinc-200'
-                              }`}
-                            >
-                              {g.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Prescripción Calculada */}
-                      <div className="flex items-center justify-between rounded-xl border border-zinc-800/50 bg-zinc-900/70 p-2.5 text-xs">
-                        <div>
-                          <p className="text-[10px] text-zinc-500">{prescription.intensityRange}</p>
-                          <p className="font-bold text-amber-400">
-                            {prescription.weightMin} - {prescription.weightMax} kg
-                          </p>
-                        </div>
-
-                        <div className="text-center">
-                          <p className="text-[10px] text-zinc-500">Esquema</p>
-                          <p className="font-semibold text-zinc-200">
-                            {prescription.sets} × {prescription.reps}
-                          </p>
-                        </div>
-
-                        <div className="text-right">
-                          <p className="text-[10px] text-zinc-500">Descanso</p>
-                          <p className="font-semibold text-sky-400">{prescription.rest}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+            return (
+              <div
+                key={stat.exercise}
+                className={`rounded-2xl border bg-zinc-950/60 p-5 shadow-lg shadow-black/30 backdrop-blur transition ${
+                  hasData ? 'border-zinc-800 hover:border-zinc-700' : 'border-zinc-900 opacity-60'
+                }`}
+              >
+                {/* Header Ejercicio */}
+                <div className="mb-4 flex items-center justify-between border-b border-zinc-800/60 pb-3">
+                  <h4 className="font-semibold text-zinc-100">{stat.exercise}</h4>
+                  <span className="rounded-full bg-zinc-900 px-2.5 py-0.5 text-xs text-zinc-400">
+                    {stat.sessionsInMonth} {stat.sessionsInMonth === 1 ? 'sesión' : 'sesiones'}
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+                {/* Métricas históricas y del mes */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                  <div>
+                    <p className="text-xs text-zinc-500">Carga media</p>
+                    <p className="font-semibold text-sky-400">
+                      {stat.avgLoadPerSet > 0 ? `${fmt(stat.avgLoadPerSet)} kg` : '—'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-zinc-500">Mejora Carga (vs mes ant.)</p>
+                    <p
+                      className={`font-semibold flex items-center gap-1 ${
+                        loadDiff > 0
+                          ? 'text-emerald-400'
+                          : loadDiff < 0
+                          ? 'text-rose-400'
+                          : 'text-zinc-500'
+                      }`}
+                    >
+                      {loadDiff > 0 && <TrendingUp className="h-3.5 w-3.5" />}
+                      {loadDiff < 0 && <TrendingDown className="h-3.5 w-3.5" />}
+                      {loadDiff === 0 && <Minus className="h-3.5 w-3.5" />}
+                      {fmtProgress(loadDiff)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-zinc-500">Volumen del mes</p>
+                    <p className="font-semibold text-emerald-400">
+                      {stat.totalVolumeMonth > 0 ? `${fmt(stat.totalVolumeMonth)}` : '—'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-zinc-500">Mejora Vol. (vs mes ant.)</p>
+                    <p
+                      className={`font-semibold flex items-center gap-1 ${
+                        volDiff > 0
+                          ? 'text-emerald-400'
+                          : volDiff < 0
+                          ? 'text-rose-400'
+                          : 'text-zinc-500'
+                      }`}
+                    >
+                      {volDiff > 0 && <TrendingUp className="h-3.5 w-3.5" />}
+                      {volDiff < 0 && <TrendingDown className="h-3.5 w-3.5" />}
+                      {volDiff === 0 && <Minus className="h-3.5 w-3.5" />}
+                      {fmtProgress(volDiff)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-zinc-500">Peso máx. histórico</p>
+                    <p className="font-semibold text-amber-400">
+                      {stat.maxWeightHistorical > 0 ? `${fmt(stat.maxWeightHistorical)} kg` : '—'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-zinc-500">Mejor 1RM (Epley)</p>
+                    <p className="font-semibold text-rose-400">
+                      {stat.best1RM > 0 ? `${fmt(stat.best1RM)} kg` : '—'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* SECCIÓN INTERACTIVA: RECOMENDACIÓN DE CARGA / OBJETIVO */}
+                {prescription && (
+                  <div className="mt-4 pt-4 border-t border-zinc-800/80">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
+                      <span className="text-[11px] font-medium text-zinc-400 flex items-center gap-1">
+                        <Target className="h-3 w-3 text-amber-400" /> Carga Sugerida
+                      </span>
+
+                      {/* Selector de Objetivos */}
+                      <div className="flex bg-zinc-900 rounded-lg p-0.5 border border-zinc-800 overflow-x-auto">
+                        {(['hipertrofia', 'fuerza', 'potencia', 'resistencia'] as TrainingGoal[]).map((g) => (
+                          <button
+                            type="button"
+                            key={g}
+                            onClick={() => handleGoalChange(stat.exercise, g)}
+                            className={`px-2 py-0.5 text-[10px] font-medium capitalize rounded-md transition whitespace-nowrap ${
+                              activeGoal === g
+                                ? 'bg-amber-500 text-zinc-950 font-bold'
+                                : 'text-zinc-400 hover:text-zinc-200'
+                            }`}
+                          >
+                            {g === 'hipertrofia'
+                              ? 'Hipertrofia'
+                              : g === 'fuerza'
+                              ? 'Fuerza'
+                              : g === 'potencia'
+                              ? 'Potencia'
+                              : 'Resistencia'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Prescripción Calculada de lib/stats */}
+                    <div className="bg-zinc-900/70 rounded-xl p-2.5 border border-zinc-800/50 flex items-center justify-between text-xs">
+                      <div>
+                        <p className="text-[10px] text-zinc-500">{prescription.intensityRange}</p>
+                        <p className="font-bold text-amber-400">
+                          {prescription.weightMin} - {prescription.weightMax} kg
+                        </p>
+                      </div>
+
+                      <div className="text-center">
+                        <p className="text-[10px] text-zinc-500">Esquema</p>
+                        <p className="font-semibold text-zinc-200">
+                          {prescription.sets} × {prescription.reps}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-[10px] text-zinc-500">Descanso</p>
+                        <p className="font-semibold text-sky-400">{prescription.rest}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
