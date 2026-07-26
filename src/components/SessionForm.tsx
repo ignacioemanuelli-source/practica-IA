@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dumbbell, PlusCircle, Check } from 'lucide-react';
+import { Dumbbell, PlusCircle, Check, Calendar } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { EXERCISES } from '@/lib/stats';
 
@@ -44,7 +44,7 @@ export default function SessionForm({ onSaved }: Props) {
 
   return (
     <div className="rounded-2xl border border-amber-500/30 bg-zinc-950/80 p-5 shadow-xl shadow-amber-500/5 backdrop-blur">
-      {/* Encabezado identico a la calculadora */}
+      {/* Encabezado idéntico en estructura y dimensiones */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Dumbbell className="h-5 w-5 text-amber-400" />
@@ -53,92 +53,103 @@ export default function SessionForm({ onSaved }: Props) {
         <span className="text-xs text-zinc-400">Guarda tus series y repeticiones</span>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Layout en Grid horizontal (3 columnas en pantallas medianas) */}
+      <form onSubmit={handleSubmit}>
+        {/* Grid idéntico de 3 columnas (md:grid-cols-3) */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {/* Seleccionar Ejercicio */}
-          <div>
-            <label className="mb-1 block text-xs text-zinc-400">Ejercicio</label>
-            <select
-              value={exercise}
-              onChange={(e) => setExercise(e.target.value)}
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
-            >
-              {EXERCISES.map((ex) => (
-                <option key={ex} value={ex}>
-                  {ex}
-                </option>
-              ))}
-            </select>
+          {/* Columna 1: Selección de Ejercicio y Carga */}
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Seleccionar Ejercicio</label>
+              <select
+                value={exercise}
+                onChange={(e) => setExercise(e.target.value)}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
+              >
+                {EXERCISES.map((ex) => (
+                  <option key={ex} value={ex}>
+                    {ex}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Carga / Peso (kg)</label>
+              <input
+                type="number"
+                min={1}
+                step="any"
+                placeholder="Ej. 80"
+                value={weight}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    setWeight('');
+                  } else {
+                    const parsed = Number(raw);
+                    setWeight(Number.isNaN(parsed) ? '' : parsed);
+                  }
+                }}
+                required
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
+              />
+            </div>
           </div>
 
-          {/* Peso levandado */}
-          <div>
-            <label className="mb-1 block text-xs text-zinc-400">Carga / Peso (kg)</label>
-            <input
-              type="number"
-              min={1}
-              step="any"
-              placeholder="Ej. 80"
-              value={weight}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (raw === '') {
-                  setWeight('');
-                } else {
-                  const parsed = Number(raw);
-                  setWeight(Number.isNaN(parsed) ? '' : parsed);
-                }
-              }}
-              required
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
-            />
+          {/* Columna 2: Repeticiones y Fecha */}
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Repeticiones</label>
+              <input
+                type="number"
+                min={1}
+                placeholder="Ej. 10"
+                value={reps}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    setReps('');
+                  } else {
+                    const parsed = Number(raw);
+                    setReps(Number.isNaN(parsed) ? '' : parsed);
+                  }
+                }}
+                required
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Fecha de la sesión</label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
+              />
+            </div>
           </div>
 
-          {/* Repeticiones */}
-          <div>
-            <label className="mb-1 block text-xs text-zinc-400">Repeticiones</label>
-            <input
-              type="number"
-              min={1}
-              placeholder="Ej. 10"
-              value={reps}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (raw === '') {
-                  setReps('');
-                } else {
-                  const parsed = Number(raw);
-                  setReps(Number.isNaN(parsed) ? '' : parsed);
-                }
-              }}
-              required
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
-            />
-          </div>
-        </div>
+          {/* Columna 3: Tarjeta equivalente al bloque de "Prescripción" */}
+          <div className="flex flex-col justify-between rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-4">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-medium text-amber-400">Confirmación de Carga</p>
+                <Calendar className="h-3.5 w-3.5 text-zinc-500" />
+              </div>
+              <p className="text-[10px] text-zinc-400">
+                Asegúrate de registrar tus series efectivas con técnica controlada.
+              </p>
+            </div>
 
-        {/* Fila inferior: Fecha y Botón de envío */}
-        <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
-          <div className="w-full sm:w-1/3">
-            <label className="mb-1 block text-xs text-zinc-400">Fecha de la sesión</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
-            />
-          </div>
-
-          <div className="flex items-end justify-end sm:w-1/3">
             <button
               type="submit"
               disabled={saving}
-              className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 px-4 text-xs font-bold transition sm:w-auto ${
+              className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-2.5 px-4 text-xs font-bold transition ${
                 success
                   ? 'bg-emerald-500 text-zinc-950'
-                  : 'bg-amber-500 text-zinc-950 hover:bg-amber-400 active:scale-98'
+                  : 'bg-amber-500 text-zinc-950 hover:bg-amber-400 active:scale-95'
               } disabled:opacity-50`}
             >
               {success ? (
