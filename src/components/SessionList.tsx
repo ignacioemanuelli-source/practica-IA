@@ -95,4 +95,3 @@ export default function SessionList({ sessions, loading, onChanged }: Props) {
     </div>
   );
 }
-
