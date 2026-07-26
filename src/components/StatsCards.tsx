@@ -1,213 +1,11 @@
-import { Dumbbell, Gauge, TrendingUp, TrendingDown, Repeat, Calendar, Minus, Target } from 'lucide-react';
-import { useMemo, useState, useEffect } from 'react';
-import type { WorkoutSession } from '@/lib/supabase';
-import {
-  computeMonthSummary,
-  computeExerciseStatsForMonths,
-  getPreviousMonthKey,
-  formatMonth,
-  getAvailableMonths,
-  getGoalRecommendation,
-  epley1RM,
-  EXERCISES,
-  type MonthKey,
-  type TrainingGoal,
-} from '@/lib/stats';
-
-type Props = {
-  sessions: WorkoutSession[];
-  month: MonthKey;
-  onMonthChange: (month: MonthKey) => void;
-};
-
-const fmt = (n?: number) => {
-  if (n === undefined || n === null || Number.isNaN(n)) return '0';
-  return n.toLocaleString('es-ES', { maximumFractionDigits: 1 });
-};
-
-const fmtProgress = (p?: number) => {
-  if (p === undefined || p === null || p === 0 || Number.isNaN(p)) return '—';
-  const isPositive = p > 0;
-  return `${isPositive ? '+' : ''}${p.toLocaleString('es-ES', { maximumFractionDigits: 1 })}%`;
-};
-
-/** TARJETA INDIVIDUAL DE EJERCICIO CON SELECTOR DE COMPARACIÓN */
-function ExerciseStatCard({
-  exercise,
-  sessions,
-  currentMonth,
-  availableMonths,
-}: {
-  exercise: string;
-  sessions: WorkoutSession[];
-  currentMonth: MonthKey;
-  availableMonths: MonthKey[];
-}) {
-  // Meses elegibles para comparar (excluimos el mes actual)
-  const validCompareMonths = useMemo(
-    () => availableMonths.filter((m) => m !== currentMonth),
-    [availableMonths, currentMonth]
-  );
-
-  // Usamos un string estable (join) como dependencia para evitar
-  // que un array con el mismo contenido pero distinta referencia
-  // dispare el useEffect y resetee la selección del usuario innecesariamente.
-  const validCompareMonthsKey = validCompareMonths.join(',');
-
-  // Función helper para encontrar el mejor mes por defecto disponible
-  const getDefaultCompareMonth = (): MonthKey => {
-    const idealPrev = getPreviousMonthKey(currentMonth);
-    // Si el mes anterior estricto existe en los datos, usamos ese
-    if (validCompareMonths.includes(idealPrev)) return idealPrev;
-    // Si no, tomamos el primer mes anterior que tengamos registrado
-    return validCompareMonths[0] || currentMonth;
-  };
-
-  // Estado local del mes de comparación
-  const [compareMonth, setCompareMonth] = useState<MonthKey>(getDefaultCompareMonth);
-
-  // Reajustamos el mes de comparación SOLO si:
-  // - cambia el mes principal, o
-  // - el mes actualmente seleccionado ya no es válido (p. ej. cambiaron los datos)
-  // Esto evita pisar una selección manual válida del usuario en cada render.
-  useEffect(() => {
-    setCompareMonth((prev) => {
-      if (validCompareMonths.includes(prev)) return prev;
-      return getDefaultCompareMonth();
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMonth, validCompareMonthsKey]);
-
-  // Cálculo memoizado de las métricas
-  const stat = useMemo(
-    () => computeExerciseStatsForMonths(sessions, exercise, currentMonth, compareMonth),
-    [sessions, exercise, currentMonth, compareMonth]
-  );
-
-  const hasData = stat.sessionsInMonth > 0;
-  const loadDiff = stat.loadProgressPercentage ?? 0;
-  const volDiff = stat.volumeProgressPercentage ?? 0;
-
-  return (
-    <div
-      className={`rounded-2xl border bg-zinc-950/60 p-5 shadow-lg shadow-black/30 backdrop-blur transition ${
-        hasData ? 'border-zinc-800 hover:border-zinc-700' : 'border-zinc-900 opacity-60'
-      }`}
-    >
-      {/* Header Ejercicio & Selector de comparación */}
-      <div className="mb-4 border-b border-zinc-800/60 pb-3">
-        <div className="flex items-center justify-between">
-          <h4 className="font-semibold text-zinc-100">{stat.exercise}</h4>
-          <span className="rounded-full bg-zinc-900 px-2.5 py-0.5 text-xs text-zinc-400">
-            {stat.sessionsInMonth} {stat.sessionsInMonth === 1 ? 'sesión' : 'sesiones'}
-          </span>
-        </div>
-
-        {/* Selector de mes a comparar */}
-        <div className="mt-2 flex items-center justify-between text-xs">
-          <span className="text-zinc-500">Comparar vs:</span>
-          {validCompareMonths.length > 0 ? (
-            <select
-              value={compareMonth}
-              onChange={(e) => setCompareMonth(e.target.value as MonthKey)}
-              className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-amber-400 outline-none focus:border-amber-500 cursor-pointer"
-            >
-              {validCompareMonths.map((m) => (
-                <option key={m} value={m}>
-                  {formatMonth(m)}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className="text-zinc-600 italic">Sin meses previos</span>
-          )}
-        </div>
-      </div>
-
-      {/* Grid de KPIs individuales */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
-        <div>
-          <p className="text-xs text-zinc-500">Carga media</p>
-          <p className="font-semibold text-sky-400">
-            {stat.avgLoadPerSet > 0 ? `${fmt(stat.avgLoadPerSet)} kg` : '—'}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-xs text-zinc-500">Variación Carga</p>
-          <p
-            className={`font-semibold flex items-center gap-1 ${
-              loadDiff > 0
-                ? 'text-emerald-400'
-                : loadDiff < 0
-                ? 'text-rose-400'
-                : 'text-zinc-500'
-            }`}
-          >
-            {loadDiff > 0 && <TrendingUp className="h-3.5 w-3.5" />}
-            {loadDiff < 0 && <TrendingDown className="h-3.5 w-3.5" />}
-            {loadDiff === 0 && <Minus className="h-3.5 w-3.5" />}
-            {fmtProgress(loadDiff)}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-xs text-zinc-500">Volumen del mes</p>
-          <p className="font-semibold text-emerald-400">
-            {stat.totalVolumeMonth > 0 ? `${fmt(stat.totalVolumeMonth)}` : '—'}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-xs text-zinc-500">Variación Vol.</p>
-          <p
-            className={`font-semibold flex items-center gap-1 ${
-              volDiff > 0
-                ? 'text-emerald-400'
-                : volDiff < 0
-                ? 'text-rose-400'
-                : 'text-zinc-500'
-            }`}
-          >
-            {volDiff > 0 && <TrendingUp className="h-3.5 w-3.5" />}
-            {volDiff < 0 && <TrendingDown className="h-3.5 w-3.5" />}
-            {volDiff === 0 && <Minus className="h-3.5 w-3.5" />}
-            {fmtProgress(volDiff)}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-xs text-zinc-500">Peso máx. histórico</p>
-          <p className="font-semibold text-amber-400">
-            {stat.maxWeightHistorical > 0 ? `${fmt(stat.maxWeightHistorical)} kg` : '—'}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-xs text-zinc-500">Mejor 1RM (Epley)</p>
-          <p className="font-semibold text-rose-400">
-            {stat.best1RM > 0 ? `${fmt(stat.best1RM)} kg` : '—'}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function StatsCards({ sessions = [], month, onMonthChange }: Props) {
-  const availableMonths = useMemo(() => getAvailableMonths(sessions || []), [sessions]);
-  const summary = useMemo(() => computeMonthSummary(sessions || [], month), [sessions, month]);
-
-  // Estados para la calculadora global
+/** 1. Componente independiente para la Calculadora */
+export function TrainingCalculator({ sessions = [] }: { sessions: WorkoutSession[] }) {
   const [selectedExercise, setSelectedExercise] = useState<string>('');
   const [manual1RM, setManual1RM] = useState<number | ''>('');
   const [calcGoal, setCalcGoal] = useState<TrainingGoal>('hipertrofia');
 
-  // Primer ejercicio para inicializar el selector
   const activeExerciseName = selectedExercise || EXERCISES[0];
 
-  // Obtener 1RM del ejercicio seleccionado para la calculadora
-  // (reutilizamos epley1RM de stats.ts en vez de reimplementar la fórmula aquí)
   const currentEx1RM = useMemo(() => {
     const filtered = sessions.filter((s) => s.exercise === activeExerciseName);
     return filtered.reduce((max, s) => Math.max(max, epley1RM(s.weight, s.reps)), 0);
@@ -215,6 +13,129 @@ export default function StatsCards({ sessions = [], month, onMonthChange }: Prop
 
   const activeRM = typeof manual1RM === 'number' && manual1RM > 0 ? manual1RM : currentEx1RM;
   const prescription = activeRM > 0 ? getGoalRecommendation(activeRM, calcGoal) : null;
+
+  return (
+    <div className="rounded-2xl border border-amber-500/30 bg-zinc-950/80 p-5 shadow-xl shadow-amber-500/5 backdrop-blur">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Target className="h-5 w-5 text-amber-400" />
+          <h3 className="font-semibold text-zinc-100">Calculadora de Carga y Prescripción</h3>
+        </div>
+        <span className="text-xs text-zinc-400">Carga recomendada según tu 1RM</span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs text-zinc-400">Seleccionar Ejercicio</label>
+            <select
+              value={activeExerciseName}
+              onChange={(e) => {
+                setSelectedExercise(e.target.value);
+                setManual1RM('');
+              }}
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
+            >
+              {EXERCISES.map((ex) => (
+                <option key={ex} value={ex}>
+                  {ex}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-zinc-400">O ingresar 1RM manual (kg)</label>
+            <input
+              type="number"
+              min={1}
+              step="any"
+              placeholder="Ej. 100"
+              value={manual1RM}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  setManual1RM('');
+                } else {
+                  const parsed = Number(raw);
+                  setManual1RM(Number.isNaN(parsed) ? '' : parsed);
+                }
+              }}
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-xs text-zinc-400">Seleccionar Objetivo</label>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { id: 'hipertrofia', label: 'Hipertrofia' },
+              { id: 'fuerza', label: 'Fuerza Máx.' },
+              { id: 'potencia', label: 'Potencia' },
+              { id: 'resistencia', label: 'Resistencia' },
+            ].map((g) => (
+              <button
+                type="button"
+                key={g.id}
+                onClick={() => setCalcGoal(g.id as TrainingGoal)}
+                className={`rounded-xl p-2.5 text-xs font-medium transition ${
+                  calcGoal === g.id
+                    ? 'bg-amber-500 font-bold text-zinc-950 shadow'
+                    : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col justify-center rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-4">
+          {prescription ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-medium text-amber-400">{prescription.label}</p>
+                <span className="text-[10px] text-zinc-500">{prescription.intensityRange}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="block text-[10px] text-zinc-500">Peso Sugerido</span>
+                  <strong className="text-base text-zinc-100">
+                    {prescription.weightMin} - {prescription.weightMax} kg
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-zinc-500">Series y Reps</span>
+                  <strong className="text-zinc-200">
+                    {prescription.sets} × {prescription.reps}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-zinc-500">Descanso</span>
+                  <strong className="text-sky-400">{prescription.rest}</strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-zinc-500">1RM Base</span>
+                  <strong className="text-zinc-300">{fmt(activeRM)} kg</strong>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-xs text-zinc-500">
+              Selecciona un ejercicio con 1RM o ingresa un peso manual.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 2. Componente independiente para KPIs globales y métricas por ejercicio */
+export function StatsSection({ sessions = [], month, onMonthChange }: Props) {
+  const availableMonths = useMemo(() => getAvailableMonths(sessions || []), [sessions]);
+  const summary = useMemo(() => computeMonthSummary(sessions || [], month), [sessions, month]);
 
   const summaryCards = [
     { label: 'Sesiones del mes', value: summary?.sessions ?? 0, icon: Dumbbell, accent: 'text-amber-400' },
@@ -264,127 +185,24 @@ export default function StatsCards({ sessions = [], month, onMonthChange }: Prop
         })}
       </div>
 
-      {/* CALCULADORA DE CARGA */}
-      <div className="rounded-2xl border border-amber-500/30 bg-zinc-950/80 p-5 shadow-xl shadow-amber-500/5 backdrop-blur">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-amber-400" />
-            <h3 className="font-semibold text-zinc-100">Calculadora de Carga y Prescripción</h3>
-          </div>
-          <span className="text-xs text-zinc-400">Carga recomendada según tu 1RM</span>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-xs text-zinc-400">Seleccionar Ejercicio</label>
-              <select
-                value={activeExerciseName}
-                onChange={(e) => {
-                  setSelectedExercise(e.target.value);
-                  setManual1RM('');
-                }}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
-              >
-                {EXERCISES.map((ex) => (
-                  <option key={ex} value={ex}>
-                    {ex}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs text-zinc-400">O ingresar 1RM manual (kg)</label>
-              <input
-                type="number"
-                placeholder="Ej. 100"
-                value={manual1RM}
-                onChange={(e) => setManual1RM(e.target.value ? Number(e.target.value) : '')}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-amber-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-xs text-zinc-400">Seleccionar Objetivo</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { id: 'hipertrofia', label: 'Hipertrofia' },
-                { id: 'fuerza', label: 'Fuerza Máx.' },
-                { id: 'potencia', label: 'Potencia' },
-                { id: 'resistencia', label: 'Resistencia' },
-              ].map((g) => (
-                <button
-                  type="button"
-                  key={g.id}
-                  onClick={() => setCalcGoal(g.id as TrainingGoal)}
-                  className={`rounded-xl p-2.5 text-xs font-medium transition ${
-                    calcGoal === g.id
-                      ? 'bg-amber-500 text-zinc-950 font-bold shadow'
-                      : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
-                  }`}
-                >
-                  {g.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col justify-center rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-4">
-            {prescription ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-medium text-amber-400">{prescription.label}</p>
-                  <span className="text-[10px] text-zinc-500">{prescription.intensityRange}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="block text-[10px] text-zinc-500">Peso Sugerido</span>
-                    <strong className="text-base text-zinc-100">
-                      {prescription.weightMin} - {prescription.weightMax} kg
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-zinc-500">Series y Reps</span>
-                    <strong className="text-zinc-200">
-                      {prescription.sets} × {prescription.reps}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-zinc-500">Descanso</span>
-                    <strong className="text-sky-400">{prescription.rest}</strong>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-zinc-500">1RM Base</span>
-                    <strong className="text-zinc-300">{fmt(activeRM)} kg</strong>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center text-xs text-zinc-500">
-                Selecciona un ejercicio con 1RM o ingresa un peso manual.
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* MÉTRICAS POR EJERCICIO (Cada una con su propio mes de comparación) */}
+      {/* MÉTRICAS POR EJERCICIO */}
       <div>
         <h3 className="mb-3 px-1 text-sm font-medium text-zinc-300">
           Métricas por ejercicio · {formatMonth(month)}
         </h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {EXERCISES.map((ex) => (
-            <ExerciseStatCard
-              key={ex}
-              exercise={ex}
-              sessions={sessions}
-              currentMonth={month}
-              availableMonths={availableMonths}
-            />
-          ))}
+          {EXERCISES.map((ex) => {
+            const exerciseSessions = sessions.filter((s) => s.exercise === ex);
+            return (
+              <ExerciseStatCard
+                key={ex}
+                exercise={ex}
+                sessions={exerciseSessions}
+                currentMonth={month}
+                availableMonths={availableMonths}
+              />
+            );
+          })}
         </div>
       </div>
     </div>
