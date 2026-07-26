@@ -73,7 +73,7 @@ export default function App() {
         </section>
 
         {/* 2. REGISTRO DE SESIÓN */}
-        <section className="mx-auto max-w-2xl">
+        <section>
           <SessionForm onSaved={fetchSessions} />
         </section>
 
