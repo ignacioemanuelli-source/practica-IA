@@ -8,6 +8,7 @@ import {
   formatMonth,
   getAvailableMonths,
   getGoalRecommendation,
+  epley1RM,
   EXERCISES,
   type MonthKey,
   type TrainingGoal,
@@ -42,15 +43,42 @@ function ExerciseStatCard({
   currentMonth: MonthKey;
   availableMonths: MonthKey[];
 }) {
-  // Estado local para el mes de comparación (por defecto el mes anterior)
-  const [compareMonth, setCompareMonth] = useState<MonthKey>(() => getPreviousMonthKey(currentMonth));
+  // Meses elegibles para comparar (excluimos el mes actual)
+  const validCompareMonths = useMemo(
+    () => availableMonths.filter((m) => m !== currentMonth),
+    [availableMonths, currentMonth]
+  );
 
-  // Si cambia el mes principal en la app, reajustamos el mes a comparar al anterior por defecto
+  // Usamos un string estable (join) como dependencia para evitar
+  // que un array con el mismo contenido pero distinta referencia
+  // dispare el useEffect y resetee la selección del usuario innecesariamente.
+  const validCompareMonthsKey = validCompareMonths.join(',');
+
+  // Función helper para encontrar el mejor mes por defecto disponible
+  const getDefaultCompareMonth = (): MonthKey => {
+    const idealPrev = getPreviousMonthKey(currentMonth);
+    // Si el mes anterior estricto existe en los datos, usamos ese
+    if (validCompareMonths.includes(idealPrev)) return idealPrev;
+    // Si no, tomamos el primer mes anterior que tengamos registrado
+    return validCompareMonths[0] || currentMonth;
+  };
+
+  // Estado local del mes de comparación
+  const [compareMonth, setCompareMonth] = useState<MonthKey>(getDefaultCompareMonth);
+
+  // Reajustamos el mes de comparación SOLO si:
+  // - cambia el mes principal, o
+  // - el mes actualmente seleccionado ya no es válido (p. ej. cambiaron los datos)
+  // Esto evita pisar una selección manual válida del usuario en cada render.
   useEffect(() => {
-    setCompareMonth(getPreviousMonthKey(currentMonth));
-  }, [currentMonth]);
+    setCompareMonth((prev) => {
+      if (validCompareMonths.includes(prev)) return prev;
+      return getDefaultCompareMonth();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonth, validCompareMonthsKey]);
 
-  // Cálculo memoizado de las métricas de este ejercicio en específico
+  // Cálculo memoizado de las métricas
   const stat = useMemo(
     () => computeExerciseStatsForMonths(sessions, exercise, currentMonth, compareMonth),
     [sessions, exercise, currentMonth, compareMonth]
@@ -78,19 +106,21 @@ function ExerciseStatCard({
         {/* Selector de mes a comparar */}
         <div className="mt-2 flex items-center justify-between text-xs">
           <span className="text-zinc-500">Comparar vs:</span>
-          <select
-            value={compareMonth}
-            onChange={(e) => setCompareMonth(e.target.value as MonthKey)}
-            className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-amber-400 outline-none focus:border-amber-500"
-          >
-            {availableMonths
-              .filter((m) => m !== currentMonth) // Evita comparar el mes contra sí mismo
-              .map((m) => (
+          {validCompareMonths.length > 0 ? (
+            <select
+              value={compareMonth}
+              onChange={(e) => setCompareMonth(e.target.value as MonthKey)}
+              className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-amber-400 outline-none focus:border-amber-500 cursor-pointer"
+            >
+              {validCompareMonths.map((m) => (
                 <option key={m} value={m}>
                   {formatMonth(m)}
                 </option>
               ))}
-          </select>
+            </select>
+          ) : (
+            <span className="text-zinc-600 italic">Sin meses previos</span>
+          )}
         </div>
       </div>
 
@@ -177,12 +207,10 @@ export default function StatsCards({ sessions = [], month, onMonthChange }: Prop
   const activeExerciseName = selectedExercise || EXERCISES[0];
 
   // Obtener 1RM del ejercicio seleccionado para la calculadora
+  // (reutilizamos epley1RM de stats.ts en vez de reimplementar la fórmula aquí)
   const currentEx1RM = useMemo(() => {
     const filtered = sessions.filter((s) => s.exercise === activeExerciseName);
-    return filtered.reduce((max, s) => {
-      const rm = s.weight * (1 + s.reps / 30);
-      return rm > max ? rm : max;
-    }, 0);
+    return filtered.reduce((max, s) => Math.max(max, epley1RM(s.weight, s.reps)), 0);
   }, [sessions, activeExerciseName]);
 
   const activeRM = typeof manual1RM === 'number' && manual1RM > 0 ? manual1RM : currentEx1RM;
