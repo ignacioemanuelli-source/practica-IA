@@ -1,4 +1,184 @@
-/** 1. Componente independiente para la Calculadora */
+import { Dumbbell, Gauge, TrendingUp, TrendingDown, Repeat, Calendar, Minus, Target } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import type { WorkoutSession } from '@/lib/supabase';
+import {
+  computeMonthSummary,
+  computeExerciseStatsForMonths,
+  getPreviousMonthKey,
+  formatMonth,
+  getAvailableMonths,
+  getGoalRecommendation,
+  epley1RM,
+  EXERCISES,
+  type MonthKey,
+  type TrainingGoal,
+} from '@/lib/stats';
+
+type Props = {
+  sessions: WorkoutSession[];
+  month: MonthKey;
+  onMonthChange: (month: MonthKey) => void;
+};
+
+const fmt = (n?: number) => {
+  if (n === undefined || n === null || Number.isNaN(n)) return '0';
+  return n.toLocaleString('es-ES', { maximumFractionDigits: 1 });
+};
+
+const fmtProgress = (p?: number) => {
+  if (p === undefined || p === null || p === 0 || Number.isNaN(p)) return '—';
+  const isPositive = p > 0;
+  return `${isPositive ? '+' : ''}${p.toLocaleString('es-ES', { maximumFractionDigits: 1 })}%`;
+};
+
+/** TARJETA INDIVIDUAL DE EJERCICIO */
+function ExerciseStatCard({
+  exercise,
+  sessions,
+  currentMonth,
+  availableMonths,
+}: {
+  exercise: string;
+  sessions: WorkoutSession[];
+  currentMonth: MonthKey;
+  availableMonths: MonthKey[];
+}) {
+  const validCompareMonths = useMemo(
+    () => availableMonths.filter((m) => m !== currentMonth),
+    [availableMonths, currentMonth]
+  );
+
+  const validCompareMonthsKey = validCompareMonths.join(',');
+
+  const getDefaultCompareMonth = (): MonthKey => {
+    const idealPrev = getPreviousMonthKey(currentMonth);
+    if (validCompareMonths.includes(idealPrev)) return idealPrev;
+    return validCompareMonths[0] || currentMonth;
+  };
+
+  const [compareMonth, setCompareMonth] = useState<MonthKey>(getDefaultCompareMonth);
+
+  useEffect(() => {
+    setCompareMonth((prev) => {
+      if (validCompareMonths.includes(prev)) return prev;
+      return getDefaultCompareMonth();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonth, validCompareMonthsKey]);
+
+  const stat = useMemo(
+    () => computeExerciseStatsForMonths(sessions, exercise, currentMonth, compareMonth),
+    [sessions, exercise, currentMonth, compareMonth]
+  );
+
+  const hasData = stat.sessionsInMonth > 0;
+  const loadDiff = stat.loadProgressPercentage ?? 0;
+  const volDiff = stat.volumeProgressPercentage ?? 0;
+
+  return (
+    <div
+      className={`rounded-2xl border bg-zinc-950/60 p-5 shadow-lg shadow-black/30 backdrop-blur transition ${
+        hasData ? 'border-zinc-800 hover:border-zinc-700' : 'border-zinc-900 opacity-60'
+      }`}
+    >
+      <div className="mb-4 border-b border-zinc-800/60 pb-3">
+        <div className="flex items-center justify-between">
+          <h4 className="font-semibold text-zinc-100">{stat.exercise}</h4>
+          <span className="rounded-full bg-zinc-900 px-2.5 py-0.5 text-xs text-zinc-400">
+            {stat.sessionsInMonth} {stat.sessionsInMonth === 1 ? 'sesión' : 'sesiones'}
+          </span>
+        </div>
+
+        <div className="mt-2 flex items-center justify-between text-xs">
+          <span className="text-zinc-500">Comparar vs:</span>
+          {validCompareMonths.length > 0 ? (
+            <select
+              value={compareMonth}
+              onChange={(e) => setCompareMonth(e.target.value as MonthKey)}
+              className="cursor-pointer rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-amber-400 outline-none focus:border-amber-500"
+            >
+              {validCompareMonths.map((m) => (
+                <option key={m} value={m}>
+                  {formatMonth(m)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="italic text-zinc-600">Sin meses previos</span>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+        <div>
+          <p className="text-xs text-zinc-500">Carga media</p>
+          <p className="font-semibold text-sky-400">
+            {stat.avgLoadPerSet > 0 ? `${fmt(stat.avgLoadPerSet)} kg` : '—'}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-zinc-500">Variación Carga</p>
+          <p
+            className={`flex items-center gap-1 font-semibold ${
+              loadDiff > 0
+                ? 'text-emerald-400'
+                : loadDiff < 0
+                ? 'text-rose-400'
+                : 'text-zinc-500'
+            }`}
+          >
+            {loadDiff > 0 && <TrendingUp className="h-3.5 w-3.5" />}
+            {loadDiff < 0 && <TrendingDown className="h-3.5 w-3.5" />}
+            {loadDiff === 0 && <Minus className="h-3.5 w-3.5" />}
+            {fmtProgress(loadDiff)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-zinc-500">Volumen del mes</p>
+          <p className="font-semibold text-emerald-400">
+            {stat.totalVolumeMonth > 0 ? `${fmt(stat.totalVolumeMonth)}` : '—'}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-zinc-500">Variación Vol.</p>
+          <p
+            className={`flex items-center gap-1 font-semibold ${
+              volDiff > 0
+                ? 'text-emerald-400'
+                : volDiff < 0
+                ? 'text-rose-400'
+                : 'text-zinc-500'
+            }`}
+          >
+            {volDiff > 0 && <TrendingUp className="h-3.5 w-3.5" />}
+            {volDiff < 0 && <TrendingDown className="h-3.5 w-3.5" />}
+            {volDiff === 0 && <Minus className="h-3.5 w-3.5" />}
+            {fmtProgress(volDiff)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-zinc-500">Peso máx. histórico</p>
+          <p className="font-semibold text-amber-400">
+            {stat.maxWeightHistorical > 0 ? `${fmt(stat.maxWeightHistorical)} kg` : '—'}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-zinc-500">Mejor 1RM (Epley)</p>
+          <p className="font-semibold text-rose-400">
+            {stat.best1RM > 0 ? `${fmt(stat.best1RM)} kg` : '—'}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 1. CALCULADORA DE CARGA */
 export function TrainingCalculator({ sessions = [] }: { sessions: WorkoutSession[] }) {
   const [selectedExercise, setSelectedExercise] = useState<string>('');
   const [manual1RM, setManual1RM] = useState<number | ''>('');
@@ -7,7 +187,7 @@ export function TrainingCalculator({ sessions = [] }: { sessions: WorkoutSession
   const activeExerciseName = selectedExercise || EXERCISES[0];
 
   const currentEx1RM = useMemo(() => {
-    const filtered = sessions.filter((s) => s.exercise === activeExerciseName);
+    const filtered = (sessions || []).filter((s) => s.exercise === activeExerciseName);
     return filtered.reduce((max, s) => Math.max(max, epley1RM(s.weight, s.reps)), 0);
   }, [sessions, activeExerciseName]);
 
@@ -132,7 +312,7 @@ export function TrainingCalculator({ sessions = [] }: { sessions: WorkoutSession
   );
 }
 
-/** 2. Componente independiente para KPIs globales y métricas por ejercicio */
+/** 2. SECCIÓN DE KPIS Y MÉTRICAS POR EJERCICIO */
 export function StatsSection({ sessions = [], month, onMonthChange }: Props) {
   const availableMonths = useMemo(() => getAvailableMonths(sessions || []), [sessions]);
   const summary = useMemo(() => computeMonthSummary(sessions || [], month), [sessions, month]);
@@ -146,7 +326,6 @@ export function StatsSection({ sessions = [], month, onMonthChange }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Selector de mes Global */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-sm text-zinc-400">
           <Calendar className="h-4 w-4 text-amber-400" />
@@ -169,7 +348,6 @@ export function StatsSection({ sessions = [], month, onMonthChange }: Props) {
         </select>
       </div>
 
-      {/* Tarjetas globales del mes */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {summaryCards.map((card) => {
           const Icon = card.icon;
@@ -185,14 +363,13 @@ export function StatsSection({ sessions = [], month, onMonthChange }: Props) {
         })}
       </div>
 
-      {/* MÉTRICAS POR EJERCICIO */}
       <div>
         <h3 className="mb-3 px-1 text-sm font-medium text-zinc-300">
           Métricas por ejercicio · {formatMonth(month)}
         </h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {EXERCISES.map((ex) => {
-            const exerciseSessions = sessions.filter((s) => s.exercise === ex);
+            const exerciseSessions = (sessions || []).filter((s) => s.exercise === ex);
             return (
               <ExerciseStatCard
                 key={ex}
