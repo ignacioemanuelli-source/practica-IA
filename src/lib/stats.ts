@@ -212,3 +212,47 @@ export function getGoalRecommendation(rm: number, goal: TrainingGoal): GoalRecom
       };
   }
 }
+/**
+ * Calcula las métricas de un ejercicio comparando un mes base contra un mes objetivo.
+ */
+export function computeExerciseStatsForMonths(
+  allSessions: WorkoutSession[],
+  exercise: string,
+  currentMonth: MonthKey,
+  compareMonth: MonthKey
+): ExerciseMonthlyStats {
+  const all = allSessions.filter((s) => s.exercise === exercise);
+
+  const monthItems = all.filter((s) => s.date.slice(0, 7) === currentMonth);
+  const prevMonthItems = all.filter((s) => s.date.slice(0, 7) === compareMonth);
+
+  // Muestras históricas
+  const maxWeightHistorical = all.reduce((max, s) => (s.weight > max ? s.weight : max), 0);
+  const best1RM = all.reduce((max, s) => {
+    const rm = epley1RM(s.weight, s.reps);
+    return rm > max ? rm : max;
+  }, 0);
+
+  // Mes Actual
+  const totalVolumeMonth = monthItems.reduce((sum, s) => sum + sessionVolume(s.weight, s.reps, s.sets), 0);
+  const totalWeightedWeight = monthItems.reduce((sum, s) => sum + s.weight * s.sets, 0);
+  const totalSetsMonth = monthItems.reduce((sum, s) => sum + s.sets, 0);
+  const avgLoadPerSet = totalSetsMonth > 0 ? totalWeightedWeight / totalSetsMonth : 0;
+
+  // Mes a Comparar
+  const prevTotalVolumeMonth = prevMonthItems.reduce((sum, s) => sum + sessionVolume(s.weight, s.reps, s.sets), 0);
+  const prevTotalWeightedWeight = prevMonthItems.reduce((sum, s) => sum + s.weight * s.sets, 0);
+  const prevTotalSets = prevMonthItems.reduce((sum, s) => sum + s.sets, 0);
+  const prevAvgLoad = prevTotalSets > 0 ? prevTotalWeightedWeight / prevTotalSets : 0;
+
+  return {
+    exercise,
+    sessionsInMonth: monthItems.length,
+    maxWeightHistorical,
+    best1RM,
+    totalVolumeMonth,
+    avgLoadPerSet,
+    loadProgressPercentage: calculatePercentageChange(avgLoadPerSet, prevAvgLoad),
+    volumeProgressPercentage: calculatePercentageChange(totalVolumeMonth, prevTotalVolumeMonth),
+  };
+}
